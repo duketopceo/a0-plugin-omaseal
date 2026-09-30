@@ -1,0 +1,25 @@
+# NOTICE
+
+This repository (**a0-plugin-omaseal**, `duketopceo/a0-plugin-omaseal`) is a
+plugin for [Agent Zero](https://github.com/agent0ai/agent-zero).
+
+## Upstream
+
+Agent Zero is licensed under the MIT License by **Agent Zero, s.r.o**
+(contact: pr@agent-zero.ai). No upstream source files are vendored here, but
+this plugin targets Agent Zero's plugin APIs and adapts patterns from it.
+
+## Provenance
+
+- `helpers/vault.py` is a port of the Khan fork's `helpers/khan_vault.py`
+  (https://github.com/duketopceo/khan), itself MIT-licensed work by Luke
+  Kimball / duketopceo.
+- The `service / account` secret model, CLI contract, and name come from
+  OmaSeal (https://github.com/duketopceo/OmaSeal), MIT, Luke Kimball.
+
+## This plugin
+
+Original work here is Copyright (c) 2026 Luke Kimball / duketopceo, released
+under the MIT terms in `LICENSE`.
+
+Preserve the upstream copyright notice and this NOTICE when redistributing.

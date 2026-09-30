@@ -1,0 +1,62 @@
+# OmaSeal plugin settings — paths, timeouts, and policy only.
+# NEVER put a secret value in this file or in any settings field.
+
+# Path to the omaseal CLI binary (https://github.com/duketopceo/OmaSeal).
+# Empty = auto-detect on PATH. On macOS or in Docker without OmaSeal
+# installed, this leg of the resolution chain is skipped cleanly.
+omaseal_bin: ""
+
+# Path to the OmaSeal IPC socket. Reserved for future IPC transport;
+# the plugin currently talks to the CLI only.
+omaseal_socket: ""
+
+# Path to the 1Password `op` CLI. Empty = auto-detect on PATH.
+op_bin: ""
+
+# Resolution fallback chain, in order. Recognized backends:
+#   omaseal — omaseal get/resolve <service> <account>
+#   op      — op read op://<vault>/<item>/<field> (see op_reference_template)
+#   env     — OS environment variable (see env_name_template)
+#   vault   — this plugin's encrypted local vault file
+# Remove a backend name to disable that leg entirely.
+resolve_order:
+  - omaseal
+  - op
+  - env
+  - vault
+
+# Account name used for provider keys on the omaseal/op legs when the agent
+# asks for a provider key by service name (models.get_api_key). With the
+# default, service "openrouter" resolves as omaseal "openrouter/api_key".
+provider_account: "api_key"
+
+# 1Password item reference template for the `op` leg. {service} and
+# {account} are substituted; used as `op read <rendered>`.
+op_reference_template: "op://AgentZero/{service}/{account}"
+
+# Environment variable name template for the `env` leg. {name} is the
+# requested secret name uppercased with - and . replaced by _.
+env_name_template: "{name}"
+
+# Plugin vault file, relative to the A0 root (or absolute). The vault is
+# AES-256-GCM encrypted and is the plugin's own store — it lets stock A0
+# installs keep secrets without any external keyring.
+vault_path: "usr/secrets/omaseal/vault.enc"
+
+# Master key resolution for the plugin vault: OMASEAL_MASTER_KEY env var,
+# else this keyfile (created on first write, mode 0600). Relative to A0 root.
+master_keyfile: "usr/secrets/omaseal/.master_key"
+master_key_env: "OMASEAL_MASTER_KEY"
+
+# Per-call subprocess timeout for omaseal/op invocations (seconds).
+cli_timeout_s: 10
+
+# Minimum value length masked in tool output / prompts. Values shorter than
+# this are never revealed to tools at all, so masking threshold mainly guards
+# log redaction of resolved values.
+mask_min_length: 8
+
+# When true, the system prompt lists available secret names
+# (service/account pairs and vault names) so agents know what they can
+# request. Names only — values are never injected.
+expose_secret_names: true
