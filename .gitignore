@@ -4,3 +4,8 @@ __pycache__/
 .pytest_cache/
 .omaseal-probe.json
 .DS_Store
+
+# Dev-machine agent skills (compound-engineering). Present locally for /lfg
+# and ce-* workflows; kept out of the published plugin package to match
+# a0-plugin-argus's clean artifact shape.
+.devin/
