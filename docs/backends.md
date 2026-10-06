@@ -59,6 +59,15 @@ POST /api/plugins/omaseal/secret_delete  {"name": "K"}
 POST /api/plugins/omaseal/secret_list    {}   # names + scopes only
 ```
 
+Vault concurrency contract — `FileVault` is designed for **multiple writers**
+(the long-lived A0 process *and* one-shot CLI/API invocations): writes are
+`flock`-serialized against a sibling `.lock` file, each instance reloads when
+the vault file's mtime changes (so the daemon sees CLI writes and vice versa),
+and a corrupt/unreadable vault is read-only until repaired externally — it is
+never silently overwritten. Decrypted values are never cached between
+operations; do not add a plaintext cache for performance — the port's security
+posture deliberately trades it for not retaining secrets in memory.
+
 ## Hermes port note
 
 For a Hermes `secret_sources` provider, the portable surface is `FileVault`
