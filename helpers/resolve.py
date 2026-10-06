@@ -107,7 +107,9 @@ def known_values() -> list[str]:
     with _mask_lock:
         vals = list(_known_values)
     try:
-        vals += get_vault().all_secret_values()
+        v = get_vault_if_exists()
+        if v is not None:
+            vals += v.all_secret_values()
     except Exception:
         pass
     return vals
@@ -216,6 +218,15 @@ def reset_vault() -> None:
     global _vault
     with _vault_lock:
         _vault = None
+
+
+def get_vault_if_exists() -> _vault_mod.FileVault | None:
+    """Vault accessor for read-only callers — returns None rather than
+    minting a master key when no vault file exists yet."""
+    cfg = get_config()
+    if not Path(abs_path(str(cfg["vault_path"]))).is_file():
+        return None
+    return get_vault()
 
 
 def _try_vault(name: str, cfg: dict) -> str | None:

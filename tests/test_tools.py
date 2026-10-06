@@ -17,6 +17,7 @@ SECRET = "sk-or-live-abc123def456"
 
 @pytest.fixture()
 def env(tmp_path, monkeypatch):
+    monkeypatch.delenv("OMASEAL_MASTER_KEY", raising=False)
     monkeypatch.setitem(R.DEFAULTS, "omaseal_bin",
                        os.path.join(FAKEBIN, "fake_omaseal.py"))
     monkeypatch.setitem(R.DEFAULTS, "op_bin", "/nonexistent/op")

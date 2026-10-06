@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -78,6 +79,66 @@ def test_file_permissions(tmp_path):
     v.set("K", "v" * 16)
     if os.name != "nt":
         assert oct(vpath.stat().st_mode & 0o777) == "0o600"
+
+
+def test_live_instance_sees_external_write(vpath):
+    """The mtime reload: a daemon-held FileVault observes a second writer
+    (the vault CLI in another process shape) without reconstruction."""
+    v1 = V.FileVault(vpath, master_key="test-master")
+    v1.set("A", "val-a-12345")
+    v2 = V.FileVault(vpath, master_key="test-master")
+    v2.set("B", "val-b-12345")
+    assert v1.get("B") == "val-b-12345"
+    assert v2.get("A") == "val-a-12345"
+
+
+def test_concurrent_writers_merge(vpath):
+    v1 = V.FileVault(vpath, master_key="test-master")
+    v2 = V.FileVault(vpath, master_key="test-master")
+    v1.set("A", "val-a-12345")
+    v2.set("B", "val-b-12345")
+    v1.set("C", "val-c-12345")
+    for n in ("A", "B", "C"):
+        assert v1.get(n) is not None
+        assert v2.get(n) is not None
+
+
+def test_deleted_file_starts_fresh(vpath):
+    v = V.FileVault(vpath, master_key="test-master")
+    v.set("K", "v-12345678")
+    os.remove(vpath)
+    assert v.get("K") is None
+    v.set("K2", "v-12345678")
+    assert v.get("K2") == "v-12345678"
+
+
+def test_corrupt_file_keeps_reads_and_refuses_writes(vpath):
+    v = V.FileVault(vpath, master_key="test-master")
+    v.set("K", "v-12345678")
+    Path(vpath).write_text("{not json", encoding="utf-8")
+    # stale in-memory records still readable; writes refuse to clobber
+    assert v.get("K") == "v-12345678"
+    with pytest.raises(ValueError, match="unreadable"):
+        v.set("NEW", "v-12345678")
+    # valid-JSON-but-wrong-shape is also corrupt, not a crash
+    Path(vpath).write_text("[]", encoding="utf-8")
+    assert v.get("K") == "v-12345678"
+    # repair externally → next op recovers and writes work again
+    Path(vpath).write_text(
+        json.dumps({"version": 1, "secrets": []}), encoding="utf-8"
+    )
+    assert v.get("K") is None
+    v.set("R", "v-12345678")
+    assert v.get("R") == "v-12345678"
+
+
+def test_name_validation(vpath):
+    v = V.FileVault(vpath, master_key="test-master")
+    for bad in ("", "  ", "bad name", "bad\nname", "§§x", "(x)"):
+        with pytest.raises(ValueError):
+            v.set(bad, "v-12345678")
+    with pytest.raises(ValueError):
+        v.set("OK_NAME", "v-12345678", ["bad scope!"])
 
 
 def test_mask_value():

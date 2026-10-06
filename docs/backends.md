@@ -37,12 +37,36 @@ available, no external dependency — the fallback that makes the plugin useful
 on stock A0, macOS, and Docker. Master key: `OMASEAL_MASTER_KEY` env var, else
 `usr/secrets/omaseal/.master_key` (generated on first write, mode 0600).
 
-Populate it from outside the agent loop:
+Write paths (all outside the agent loop — no tool call ever carries a value):
 
-```python
-from usr.plugins.omaseal.helpers.resolve import get_vault
-get_vault().set("OPENROUTER_API_KEY", "<value>", ["model_provider"])
+```bash
+# Ops shell — works standalone or inside the A0 container via docker exec.
+# `add` reads the value from piped stdin or a TTY prompt — never argv.
+python -m usr.plugins.omaseal.helpers.vault add OPENROUTER_API_KEY        # TTY prompt
+printf %s "$KEY" | python -m usr.plugins.omaseal.helpers.vault add KEY --scope tool_a
+python -m usr.plugins.omaseal.helpers.vault list                        # names only
+python -m usr.plugins.omaseal.helpers.vault delete OLD_KEY
 ```
+
+Scopes are stored metadata today — nothing enforces them during resolution
+yet (no caller passes `requester_scope`); treat them as labeling until
+enforcement lands.
+
+```http
+# Authenticated API (CSRF-protected) — the WebUI-facing write path
+POST /api/plugins/omaseal/secret_set     {"name": "K", "value": "…", "scopes": ["s"]}
+POST /api/plugins/omaseal/secret_delete  {"name": "K"}
+POST /api/plugins/omaseal/secret_list    {}   # names + scopes only
+```
+
+## Hermes port note
+
+For a Hermes `secret_sources` provider, the portable surface is `FileVault`
+(AES-256-GCM, explicit paths, no framework imports) plus the resolve chain's
+backend-try logic — both are plain functions in `helpers/vault.py` and
+`helpers/resolve.py`. A Hermes plugin would wrap them behind `register(ctx)`
+and expose `get(name)`/`list_meta()`; the A0-specific parts (extensions,
+tools, api handlers) stay in this repo as the A0 shim.
 
 ## Docker caveat
 
