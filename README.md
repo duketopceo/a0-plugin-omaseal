@@ -55,8 +55,21 @@ account=<provider_account>)` on the keyring legs; `service/account` names like
 
 The plugin vault is AES-256-GCM encrypted, mode `0600`, master key from
 `OMASEAL_MASTER_KEY` or `usr/secrets/omaseal/.master_key` (created on first
-write). Populate it from outside the agent — e.g. the `omaseal` CLI or a
-small script — not through a tool call, so values never enter chat history.
+write). Write paths:
+
+- **HTTP API** — `POST /api/plugins/omaseal/secret_set` (auth + CSRF on) with
+  `{name, value, scopes?}`; `secret_delete` and `secret_list` (metadata only)
+  alongside it. The response echoes masked metadata, never the value.
+- **Shell** — `python -m usr.plugins.omaseal.helpers.vault add|list|delete`
+  inside the A0 checkout or container (`docker exec`). `add` reads the value
+  from piped stdin or a TTY prompt — secrets never travel in argv (no
+  `--value` flag, same rule as `omaseal set`). `--vault-path`/`--keyfile`/
+  `--env-var` override the defaults.
+- **Host keyrings** — for the `omaseal`/`op` legs, write with those CLIs as
+  usual (`omaseal set <service> <account>`); the plugin reads them at call time.
+
+Never write secrets through a tool call — a value in tool arguments lands in
+chat history.
 
 Uninstalling the plugin does **not** delete `usr/secrets/omaseal/` — stored
 secrets survive reinstall on purpose.

@@ -91,13 +91,54 @@ class _SecretsManager:
 _secrets_mod.get_secrets_manager = lambda context=None: _SecretsManager()
 _helpers.secrets = _secrets_mod
 
+# helpers.api: ApiHandler base + Request/Response names the plugin's api/
+# handlers import. Handlers are constructed bare and process() is awaited
+# directly in tests — no Flask involved.
+_api_mod = types.ModuleType("helpers.api")
+
+
+class ApiHandler:
+    def __init__(self, app=None, thread_lock=None):
+        self.app = app
+        self.thread_lock = thread_lock
+
+    @classmethod
+    def requires_auth(cls) -> bool:
+        return True
+
+    @classmethod
+    def requires_csrf(cls) -> bool:
+        return cls.requires_auth()
+
+    @classmethod
+    def get_methods(cls):
+        return ["POST"]
+
+    async def process(self, input, request):
+        raise NotImplementedError
+
+
+_api_mod.ApiHandler = ApiHandler
+_api_mod.Request = object
+_api_mod.Response = Response
+_helpers.api = _api_mod
+
 sys.modules.setdefault("helpers", _helpers)
 sys.modules["helpers.tool"] = _tool
 sys.modules["helpers.extension"] = _ext
 sys.modules["helpers.plugins"] = _plugins_mod
 sys.modules["helpers.secrets"] = _secrets_mod
+sys.modules["helpers.api"] = _api_mod
 
 
 class FakeAgent:
     def __init__(self, context=None):
         self.context = context
+
+
+def run(coro):
+    """Shared coroutine runner — same convention as the per-file `run`
+    helpers in the older test modules (which keep their own copies)."""
+    import asyncio
+
+    return asyncio.run(coro)

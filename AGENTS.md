@@ -31,7 +31,8 @@ change.
 | `helpers/vault.py` | AES-256-GCM file vault, ported from Khan's `helpers/khan_vault.py`. Framework-independent: explicit paths, no `helpers.files` import. |
 | `helpers/resolve.py` | The chain. `resolve()` raises `ResolutionError` naming tried backends; `resolve_provider_key()` returns `None` instead (the get_api_key hook must not break model calls). |
 | `helpers/paths.py` | `get_abs_path` shim — uses the framework helper when present, cwd otherwise. |
-| `tools/` | `secret_get`, `secret_list`. Both return masked output only. There is deliberately **no `secret_set`** — a value in tool args lands in chat history. |
+| `api/` | `secret_set`, `secret_delete`, `secret_list` — `POST /api/plugins/omaseal/<name>` handlers (`helpers.api.ApiHandler`), auth+CSRF defaults inherited (never overridden). The vault write path lives here; responses echo masked metadata only. The api `secret_list` is vault-metadata-only — narrower than the `secret_list` **tool**, which aggregates the whole chain + backend status. |
+| `tools/` | `secret_get`, `secret_list`. Both return masked output only. There is deliberately **no `secret_set` tool** — writes go through `api/secret_set`; a value in tool args lands in chat history. |
 | `extensions/python/_functions/models/get_api_key/end/` | Fills `data["result"]` only when dotenv produced nothing. |
 | `extensions/python/tool_execute_before/_05_*` | Resolves `§§secret(NAME)` via the chain **before** core `_10_unmask_secrets` (which raises on unknown names). Names present in `secrets.env` are left for core — local file wins. |
 | `extensions/python/tool_execute_after/_15_*` | Masks chain-resolved values in `response.message`. |
@@ -44,8 +45,10 @@ change.
 
 - **Imports use the A0-qualified path** — `usr.plugins.omaseal.helpers...`,
   not `helpers.resolve`. `tests/conftest.py` synthesizes the package and
-  stubs `helpers.tool`, `helpers.extension`, `helpers.plugins`, and
-  `helpers.secrets`. `helpers.secrets.load_result` is the test knob for
+  stubs `helpers.tool`, `helpers.extension`, `helpers.plugins`,
+  `helpers.secrets`, and `helpers.api` (ApiHandler + Request/Response names;
+  handlers are constructed bare and `process()` is awaited directly — no
+  Flask). `helpers.secrets.load_result` is the test knob for
   "a name exists in core `secrets.env`".
 - **The mask registry is in-memory** (`resolve.register_value`). Masking
   extensions can only redact values the process has resolved or that live in
@@ -54,8 +57,10 @@ change.
 - **`secret_get` must keep returning masked output.** The value crosses the
   model boundary only inside tool args at execution time.
 - **Tests must stay offline** — no real keyring, no `op`, no network.
-- Backend subprocesses never see secrets in argv. `omaseal set` reads stdin;
-  if a write path is ever added, keep it that way.
+- Secrets never travel in argv or tool args: `omaseal set` reads stdin; the
+  vault write path takes values via the POST body (`api/secret_set`) or
+  piped stdin / a TTY prompt (`python -m usr.plugins.omaseal.helpers.vault`
+  has no `--value` flag on purpose).
 
 
 ## Code graph index (optional accelerator)

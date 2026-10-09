@@ -13,6 +13,7 @@ FAKEBIN = os.path.join(os.path.dirname(__file__), "fakebin")
 
 @pytest.fixture()
 def env(tmp_path, monkeypatch):
+    monkeypatch.delenv("OMASEAL_MASTER_KEY", raising=False)
     """Per-test config: fresh vault dir, fakebin CLIs, reset caches."""
     vault_path = tmp_path / "secrets" / "vault.enc"
     monkeypatch.setitem(R.DEFAULTS, "omaseal_bin",
