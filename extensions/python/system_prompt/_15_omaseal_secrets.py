@@ -7,6 +7,7 @@ guessing. Disable with `expose_secret_names: false` in plugin settings.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from helpers.extension import Extension
@@ -20,12 +21,13 @@ class OmaSealSecretsPrompt(Extension):
         try:
             from usr.plugins.omaseal.helpers import resolve as R
 
-            if not R.get_config()["expose_secret_names"]:
+            cfg = await asyncio.to_thread(R.get_config)
+            if not cfg["expose_secret_names"]:
                 return
-            names = R.list_secret_names()
+            names = await asyncio.to_thread(R.list_secret_names)
             if not names:
                 return
-            status = R.backend_status()
+            status = await asyncio.to_thread(R.backend_status)
             live = ", ".join(k for k, v in status.items() if v) or "none"
             listing = "\n".join(f"- {n}" for n in names)
             system_prompt.append(
