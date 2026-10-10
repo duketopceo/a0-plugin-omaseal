@@ -143,3 +143,54 @@ def test_missing_binary_leg_skipped(env, monkeypatch):
     monkeypatch.setenv("FALLBACK_OK", "still-works-88")
     r = R.resolve("FALLBACK_OK")
     assert r.value == "still-works-88"
+
+
+# --- _run deadlock-hardening (locked keyring / spawned-grandchild hangs) ---
+
+HANG = os.path.join(FAKEBIN, "hang_cli.py")
+
+
+def test_run_kills_hanging_cli_within_timeout():
+    """A CLI that never exits must not hang _run past its timeout — the
+    pinentry-gnome3 incident: subprocess.run's post-kill communicate()
+    blocked forever on a grandchild holding the pipe."""
+    import time
+    os.chmod(HANG, os.stat(HANG).st_mode | stat.S_IXUSR)
+    t = time.monotonic()
+    out = R._run([HANG], 1.0)
+    elapsed = time.monotonic() - t
+    assert out is None
+    assert elapsed < 10  # was: infinite hang on the pipe-holding grandchild
+
+
+def test_run_grandchild_holding_pipe_also_dies(monkeypatch):
+    import time
+    os.chmod(HANG, os.stat(HANG).st_mode | stat.S_IXUSR)
+    monkeypatch.setenv("HANG_SPAWN_CHILD", "1")
+    t = time.monotonic()
+    out = R._run([HANG], 1.0)
+    assert out is None and time.monotonic() - t < 10
+
+
+def test_timed_out_cli_is_negative_cached(env, monkeypatch):
+    """After one timeout the same (binary, subcommand) is skipped for the
+    TTL — a locked keyring must cost one stall, not one per provider
+    lookup × every get_settings() call."""
+    import time
+    os.chmod(HANG, os.stat(HANG).st_mode | stat.S_IXUSR)
+    argv = [HANG, "resolve", "x", "y"]
+    t = time.monotonic()
+    assert R._run(argv, 0.5) is None
+    first = time.monotonic() - t
+    t = time.monotonic()
+    assert R._run(argv, 0.5) is None  # dead-cache hit — instant
+    assert time.monotonic() - t < 0.1
+    assert first > 0.4  # sanity: the first call really waited
+    # different subcommand on the same binary is NOT cached
+    assert (HANG, "get") not in R._dead
+
+
+def test_dead_cache_cleared_by_reset(env):
+    R._dead[("somebin", "get")] = 1.0
+    R.reset_config_cache()
+    assert R._dead == {}

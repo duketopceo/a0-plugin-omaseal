@@ -20,8 +20,10 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import signal
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -88,6 +90,8 @@ def reset_config_cache() -> None:
     global _cfg_cache
     with _cfg_lock:
         _cfg_cache = None
+    with _dead_lock:
+        _dead.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -135,23 +139,70 @@ def _which(binary: str) -> str | None:
     return shutil.which(binary)
 
 
+# Negative cache for timed-out CLIs — helpers.settings.get_settings() runs
+# the get_api_key extension once per provider, so a hung backend (locked
+# keyring, dead 1Password app) would otherwise cost one timeout × every
+# provider × every settings read. Keyed on (binary, subcommand) so a cheap
+# `omaseal get` still runs while `omaseal resolve` is marked dead.
+_DEAD_TTL_S = 60.0
+_dead: dict[tuple[str, str], float] = {}
+_dead_lock = threading.Lock()
+
+
+def _dead_key(argv: list[str]) -> tuple[str, str]:
+    return (argv[0], argv[1] if len(argv) > 1 else "")
+
+
 def _run(argv: list[str], timeout: float) -> str | None:
     """Run a secrets CLI. Returns stripped stdout, or None on any failure.
     Never raises; stderr is captured and discarded so an error message can
-    never carry a value into our logs."""
+    never carry a value into our logs.
+
+    Deadlock-hardened: a plain subprocess.run(timeout=) still hangs when a
+    killed child's grandchildren (pinentry/keyring-unlock daemons) hold the
+    stdout pipe open — observed live: ``omaseal resolve`` spawning
+    pinentry-gnome3 froze ``helpers.settings.get_settings()`` and prevented
+    a0 from booting. So: stdin DEVNULL (prompts get EOF), DISPLAY/GPG_TTY
+    blanked (no GUI/tty pinentry), own process group so TimeoutExpired can
+    killpg the whole tree, and a TTL negative cache so the same dead
+    backend is skipped rather than re-probed on every lookup."""
+    key = _dead_key(argv)
+    with _dead_lock:
+        dead_at = _dead.get(key)
+        if dead_at is not None:
+            if time.monotonic() - dead_at < _DEAD_TTL_S:
+                return None
+            del _dead[key]
+    env = {**os.environ, "LANG": "C", "DISPLAY": "", "GPG_TTY": ""}
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             argv,
-            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             text=True,
-            timeout=timeout,
-            env={**os.environ, "LANG": "C"},
+            start_new_session=True,
+            env=env,
         )
-    except (OSError, subprocess.TimeoutExpired):
+    except OSError:
+        return None
+    try:
+        out, _ = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        with _dead_lock:
+            _dead[key] = time.monotonic()
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+        try:
+            proc.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
         return None
     if proc.returncode != 0:
         return None
-    return proc.stdout
+    return out
 
 
 def _split_name(name: str, provider_account: str) -> tuple[str, str]:
