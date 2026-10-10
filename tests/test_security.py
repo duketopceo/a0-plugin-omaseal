@@ -83,7 +83,7 @@ def test_full_roundtrip_value_stays_out_of_model_view(env):
     assert SECRET in args["command"]  # real value reaches the tool only
 
     # 3. the tool echoes its command line; output masking strips the value
-    resp = ht.Response(message=f"ran: {args['command']} -> 200 ok")
+    resp = ht.Response(message=f"ran: {args['command']} -> 200 ok", break_loop=False)
     run(OmaSealMaskToolOutput(agent=A()).execute(response=resp))
     assert SECRET not in resp.message
 

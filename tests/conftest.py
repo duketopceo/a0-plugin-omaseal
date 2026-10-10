@@ -30,7 +30,11 @@ sys.modules["usr.plugins.omaseal"] = _omaseal
 # --- minimal A0 framework stubs ---------------------------------------------
 
 class Response:
-    def __init__(self, message="", break_loop=False, additional=None, **kw):
+    """Mirrors helpers.tool.Response — a dataclass where break_loop is a
+    REQUIRED field. The stub used to default it to False, so a tool that
+    forgot the arg passed tests but TypeError'd against the real host."""
+
+    def __init__(self, message, break_loop, additional=None, **kw):
         self.message = message
         self.break_loop = break_loop
         self.additional = additional or {}
@@ -70,6 +74,17 @@ _helpers.tool = _tool
 _ext = types.ModuleType("helpers.extension")
 _ext.Extension = Extension
 _helpers.extension = _ext
+
+_errors_mod = types.ModuleType("helpers.errors")
+
+
+class RepairableException(Exception):
+    """Stub of helpers.errors.RepairableException — the host class a0
+    surfaces to the agent as a tool-fixable error."""
+
+
+_errors_mod.RepairableException = RepairableException
+_helpers.errors = _errors_mod
 
 # Mutable plugin-config stub; tests override by monkeypatching
 # usr.plugins.omaseal.helpers.resolve.DEFAULTS then reset_config_cache().
@@ -126,6 +141,7 @@ _helpers.api = _api_mod
 sys.modules.setdefault("helpers", _helpers)
 sys.modules["helpers.tool"] = _tool
 sys.modules["helpers.extension"] = _ext
+sys.modules["helpers.errors"] = _errors_mod
 sys.modules["helpers.plugins"] = _plugins_mod
 sys.modules["helpers.secrets"] = _secrets_mod
 sys.modules["helpers.api"] = _api_mod
