@@ -168,7 +168,7 @@ class FileVault:
             return
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
-            items = data["secrets"] if isinstance(data, dict) else None
+            items = data.get("secrets") if isinstance(data, dict) else None
             if not isinstance(items, list):
                 raise ValueError("vault file: 'secrets' is not a list")
         except (OSError, ValueError):
@@ -268,6 +268,14 @@ class FileVault:
             self._persist()
 
     def get(self, name: str, *, requester_scope: str | None = None) -> str | None:
+        """Return the secret value, or None when absent.
+
+        A record carrying ``scopes`` enforces them only when the caller
+        presents a scope identity: a mismatched ``requester_scope`` raises
+        PermissionError while ``None`` (an unscoped in-process caller such as
+        the diagnostic tools or provider-key lookup) resolves permissively.
+        The enforcement boundary is the §§secret() substitution path, where
+        the requesting tool's name is always passed."""
         name = name.strip()
         with self._lock:
             self._maybe_reload()
@@ -300,12 +308,15 @@ class FileVault:
             return True
 
     def all_secret_values(self) -> list[str]:
+        """Every decryptable value, for the in-process mask registry.
+        Bypasses scope checks deliberately — masking protects values, it
+        never discloses them, so scope must not thin the redaction set."""
         with self._lock:
             self._maybe_reload()
             vals: list[str] = []
-            for name in list(self._records):
+            for rec in list(self._records.values()):
                 try:
-                    vals.append(self.get(name) or "")
+                    vals.append(self._decrypt(rec))
                 except Exception:
                     continue
             return [v for v in vals if v]

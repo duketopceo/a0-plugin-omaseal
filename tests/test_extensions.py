@@ -120,7 +120,7 @@ def test_tool_output_masked(env):
     import helpers.tool as ht
 
     R.resolve("openrouter/api_key")  # registers value
-    resp = ht.Response(message=f"used key {SECRET} ok")
+    resp = ht.Response(message=f"used key {SECRET} ok", break_loop=False)
     run(OmaSealMaskToolOutput(agent=_Agent()).execute(response=resp))
     assert SECRET not in resp.message
     assert "***REDACTED***" in resp.message

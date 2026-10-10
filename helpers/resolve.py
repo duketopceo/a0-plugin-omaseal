@@ -202,7 +202,7 @@ def _run(argv: list[str], timeout: float) -> str | None:
         return None
     if proc.returncode != 0:
         return None
-    return out
+    return out.strip()
 
 
 def _split_name(name: str, provider_account: str) -> tuple[str, str]:
@@ -280,22 +280,26 @@ def get_vault_if_exists() -> _vault_mod.FileVault | None:
     return get_vault()
 
 
-def _try_vault(name: str, cfg: dict) -> str | None:
+def _try_vault(name: str, cfg: dict, requester_scope: str | None = None) -> str | None:
     path = abs_path(str(cfg["vault_path"]))
     if not Path(path).is_file():
         return None
     try:
         v = get_vault()
-        return v.get(name) or _vault_ci_get(v, name)
+        return v.get(name, requester_scope=requester_scope) or _vault_ci_get(
+            v, name, requester_scope
+        )
     except Exception:
         return None
 
 
-def _vault_ci_get(v: _vault_mod.FileVault, name: str) -> str | None:
+def _vault_ci_get(
+    v: _vault_mod.FileVault, name: str, requester_scope: str | None = None
+) -> str | None:
     upper = name.upper()
     for meta in v.list_meta():
         if meta["name"].upper() == upper:
-            return v.get(meta["name"])
+            return v.get(meta["name"], requester_scope=requester_scope)
     return None
 
 
@@ -303,16 +307,24 @@ def _vault_ci_get(v: _vault_mod.FileVault, name: str) -> str | None:
 # public API
 
 _BACKENDS = {
-    "omaseal": lambda name, cfg: _try_omaseal(*_split_name(name, cfg["provider_account"]), cfg),
-    "op": lambda name, cfg: _try_op(*_split_name(name, cfg["provider_account"]), cfg),
-    "env": lambda name, cfg: _try_env(name, cfg),
-    "vault": lambda name, cfg: _try_vault(name, cfg),
+    "omaseal": lambda name, cfg, scope: _try_omaseal(
+        *_split_name(name, cfg["provider_account"]), cfg
+    ),
+    "op": lambda name, cfg, scope: _try_op(
+        *_split_name(name, cfg["provider_account"]), cfg
+    ),
+    "env": lambda name, cfg, scope: _try_env(name, cfg),
+    "vault": lambda name, cfg, scope: _try_vault(name, cfg, scope),
 }
 
 
-def resolve(name: str) -> ResolvedSecret:
+def resolve(name: str, *, requester_scope: str | None = None) -> ResolvedSecret:
     """Resolve a secret by name ('service/account' or bare name) through the
-    configured chain. Registers the value for masking before returning."""
+    configured chain. Registers the value for masking before returning.
+
+    ``requester_scope`` is the caller's scope identity (e.g. the tool name
+    for §§secret() substitution). Vault records carrying scopes enforce it;
+    other backends and scope-less records ignore it."""
     cfg = get_config()
     tried: list[str] = []
     for backend in cfg["resolve_order"]:
@@ -320,7 +332,7 @@ def resolve(name: str) -> ResolvedSecret:
         if fn is None:
             continue
         tried.append(str(backend))
-        value = fn(name, cfg)
+        value = fn(name, cfg, requester_scope)
         if value:
             register_value(value)
             return ResolvedSecret(name=name, value=value, source=str(backend))

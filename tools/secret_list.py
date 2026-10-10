@@ -1,3 +1,5 @@
+import asyncio
+
 from helpers.tool import Tool, Response
 
 from usr.plugins.omaseal.helpers import resolve as R
@@ -11,8 +13,10 @@ class SecretList(Tool):
     """
 
     async def execute(self, **_kwargs):
-        names = R.list_secret_names()
-        status = R.backend_status()
+        names, status = await asyncio.gather(
+            asyncio.to_thread(R.list_secret_names),
+            asyncio.to_thread(R.backend_status),
+        )
         live = [k for k, v in status.items() if v]
         offline = [k for k, v in status.items() if not v]
 

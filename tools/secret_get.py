@@ -1,3 +1,5 @@
+import asyncio
+
 from helpers.tool import Tool, Response
 
 from usr.plugins.omaseal.helpers import resolve as R
@@ -21,14 +23,14 @@ class SecretGet(Tool):
                 break_loop=False,
             )
         try:
-            resolved = R.resolve(name)
+            resolved = await asyncio.to_thread(R.resolve, name)
         except R.ResolutionError as e:
             return Response(message=f"secret_get: {e}", break_loop=False)
         return Response(
             message=(
                 f"secret '{resolved.name}' found via {resolved.source}: "
                 f"{mask_value(resolved.value)}\n"
-                f"Use it in tool arguments as §§secret({resolved.name.upper()}) "
+                f"Use it in tool arguments as §§secret({resolved.name}) "
                 f"— the placeholder is substituted at execution time and the "
                 f"value never appears in chat."
             ),
