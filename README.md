@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/wordmark-dark.svg">
+    <img alt="a0-plugin-omaseal" src="assets/brand/wordmark.svg" height="56">
+  </picture>
+</p>
+
 # OmaSeal for Agent Zero
 
 One secrets interface for your agent. Store keys once — in the OmaSeal
@@ -8,6 +15,24 @@ execution time and masked again on the way out.
 
 Built for the [OmaSeal](https://github.com/duketopceo/OmaSeal) `service /
 account` model, but works on stock Agent Zero with no OmaSeal install.
+
+Status: v0.2.0, 81 offline tests, no UI of its own (Agent Zero renders the
+settings). See [ROADMAP.md](ROADMAP.md).
+
+## How it works
+
+```mermaid
+flowchart LR
+  A[agent writes §§secret NAME] --> U[tool_execute_before: resolve]
+  U --> C{{resolve_order}}
+  C --> O[omaseal keyring]
+  C --> P[1Password op]
+  C --> E[env]
+  C --> V[(encrypted vault)]
+  U -->|real value| T[tool runs]
+  T --> M[tool_execute_after: mask]
+  M --> L[agent sees masked text]
+```
 
 ## What you get
 
@@ -84,8 +109,9 @@ same.
 
 ## Install
 
-Plugin Hub → Browse → `omaseal`, or copy this repo into
-`usr/plugins/omaseal/` and restart Agent Zero.
+Copy or clone this repo into `usr/plugins/omaseal/` and restart Agent Zero
+(`git clone https://github.com/duketopceo/a0-plugin-omaseal usr/plugins/omaseal`).
+The Plugin Hub listing is still pending, so Plugins → Browse does not show it yet.
 
 ## Security model
 
@@ -96,6 +122,14 @@ Plugin Hub → Browse → `omaseal`, or copy this repo into
 - No `secret_set` tool exists: a value in tool arguments would land in chat
   history. Secrets enter the system from outside the agent loop.
 - `default_config.yaml` holds paths and policy only, never values.
+
+## Contributing
+
+`python3.12 -m pytest tests/ -q` runs offline with `pip install pytest
+cryptography`. Read [AGENTS.md](AGENTS.md) first: tests must never call a real
+keyring or `op`, and no tool may accept a secret value. Design direction and
+brand assets (a proposal, pending owner sign-off): [DESIGN.md](DESIGN.md),
+[assets/brand/](assets/brand/).
 
 ## License
 
